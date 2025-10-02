@@ -1,0 +1,152 @@
+.summary-numbers {
+  background: white;
+  border-radius: 10px;
+  padding: 2rem;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+  margin-bottom: 2rem;
+}
+
+.summary-numbers h2 {
+  color: #333;
+  margin-bottom: 0.5rem;
+  font-size: 1.8rem;
+  font-weight: 300;
+}
+
+.summary-description {
+  color: #666;
+  margin-bottom: 2rem;
+  font-size: 0.9rem;
+  font-style: italic;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.summary-square {
+  border-radius: 10px;
+  padding: 1.5rem;
+  color: white;
+  text-align: center;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  cursor: pointer;
+  min-height: 150px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.summary-square:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+}
+
+.summary-square::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(45deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 100%);
+  pointer-events: none;
+}
+
+.summary-content {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+}
+
+.summary-title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0 0 1rem 0;
+  line-height: 1.3;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+}
+
+.summary-value {
+  font-size: 2.5rem;
+  font-weight: bold;
+  margin: 0.5rem 0;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+  font-family: 'Courier New', monospace;
+}
+
+.summary-original {
+  font-size: 0.8rem;
+  opacity: 0.8;
+  margin-top: 0.5rem;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+}
+
+.legend {
+  display: flex;
+  justify-content: center;
+  gap: 2rem;
+  flex-wrap: wrap;
+  padding-top: 1rem;
+  border-top: 1px solid #eee;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.legend-color {
+  width: 20px;
+  height: 20px;
+  border-radius: 3px;
+  border: 1px solid #ddd;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .summary-numbers {
+    padding: 1rem;
+  }
+  
+  .summary-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  
+  .summary-square {
+    min-height: 120px;
+    padding: 1rem;
+  }
+  
+  .summary-title {
+    font-size: 0.9rem;
+  }
+  
+  .summary-value {
+    font-size: 2rem;
+  }
+  
+  .legend {
+    gap: 1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .summary-value {
+    font-size: 1.8rem;
+  }
+  
+  .summary-original {
+    font-size: 0.7rem;
+  }
+}
+
