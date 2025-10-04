@@ -20,29 +20,12 @@ from datetime import datetime
 def apply_filters(queryset, filters):
     """Apply filters to the queryset based on request parameters"""
     if filters.get('mentor'):
-        queryset = queryset.filter(
-            Q(mentor_name__icontains=filters['mentor']) |
-            Q(mentor_other_text__icontains=filters['mentor'])
-        )
+        # Filter by mentor using project_mentor field
+        queryset = queryset.filter(project_mentor__icontains=filters['mentor'])
     
     if filters.get('topic'):
-        # For topic filtering, we need to map topic names to numbers
-        # This is a simplified mapping - you might want to create a proper mapping
-        topic_mapping = {
-            'data_science': 1,
-            'web_development': 2,
-            'mobile_development': 3,
-            'ai_ml': 4,
-            'cybersecurity': 5,
-            'cloud_computing': 6,
-            'other': 7
-        }
-        topic_value = topic_mapping.get(filters['topic'].lower())
-        if topic_value:
-            queryset = queryset.filter(
-                Q(topics_working_on=topic_value) |
-                Q(topics_worked_on=topic_value)
-            )
+        # Filter by topic using topic field
+        queryset = queryset.filter(topic__icontains=filters['topic'])
     
     if filters.get('projectName'):
         queryset = queryset.filter(project_title__icontains=filters['projectName'])
@@ -66,7 +49,7 @@ def apply_filters(queryset, filters):
 
 class SurveyResponseListCreateView(generics.ListCreateAPIView):
     """List all survey responses or create a new one"""
-    queryset = SurveyResponse.objects.all()
+    queryset = SurveyResponse.objects.all()  # Both starting and ending surveys
     
     def get_serializer_class(self):
         if self.request.method == 'GET':
@@ -186,15 +169,15 @@ def import_qualtrics_csv(request):
 def dashboard_stats(request):
     """Get dashboard statistics"""
     try:
-        # Apply filters
-        queryset = apply_filters(SurveyResponse.objects.all(), request.GET)
+        # Apply filters - only ending surveys
+        queryset = apply_filters(SurveyResponse.objects.filter(survey_type=2), request.GET)
         
         total_responses = queryset.count()
-        starting_responses = queryset.filter(survey_type=1).count()
-        ending_responses = queryset.filter(survey_type=2).count()
+        starting_responses = 0  # We're only showing ending surveys
+        ending_responses = queryset.count()
         
         # Average ratings for ending surveys
-        ending_surveys = queryset.filter(survey_type=2)
+        ending_surveys = queryset  # Already filtered to ending surveys
         
         avg_ratings = {}
         rating_fields = [
@@ -220,9 +203,7 @@ def dashboard_stats(request):
             print(f"Error calculating recommendation: {e}")
             avg_recommendation = None
         
-        completion_rate = 0
-        if starting_responses > 0:
-            completion_rate = round((ending_responses / starting_responses * 100), 2)
+        completion_rate = 100  # Since we're only showing ending surveys, completion rate is 100%
         
         return Response({
             'total_responses': total_responses,
@@ -258,34 +239,29 @@ def test_api(request):
 def survey_analytics(request):
     """Get detailed analytics for the dashboard"""
     try:
-        # Apply filters
-        queryset = apply_filters(SurveyResponse.objects.all(), request.GET)
+        # Apply filters - only ending surveys
+        queryset = apply_filters(SurveyResponse.objects.filter(survey_type=2), request.GET)
         
-        # Topic analysis
-        topics_starting = list(queryset.filter(
-            survey_type=1, topics_working_on__isnull=False
-        ).values_list('topics_working_on', flat=True))
-        
+        # Topic analysis - only ending surveys
         topics_ending = list(queryset.filter(
-            survey_type=2, topics_worked_on__isnull=False
+            topics_worked_on__isnull=False
         ).values_list('topics_worked_on', flat=True))
         
         # Confidence analysis (from ending surveys - Q3.11)
         confidence_data = list(queryset.filter(
-            survey_type=2, confidence_job_placement__isnull=False
+            confidence_job_placement__isnull=False
         ).values_list('confidence_job_placement', flat=True))
         
         # Skills improvement analysis
         hard_skills_data = list(queryset.filter(
-            survey_type=2, hard_skills_improved__isnull=False
+            hard_skills_improved__isnull=False
         ).values_list('hard_skills_improved', flat=True))
         
         soft_skills_data = list(queryset.filter(
-            survey_type=2, soft_skills_improved__isnull=False
+            soft_skills_improved__isnull=False
         ).values_list('soft_skills_improved', flat=True))
         
         return Response({
-            'topics_starting': topics_starting,
             'topics_ending': topics_ending,
             'confidence_levels': confidence_data,
             'hard_skills_improvement': hard_skills_data,
@@ -294,7 +270,6 @@ def survey_analytics(request):
     except Exception as e:
         return Response({
             'error': f'Error calculating analytics: {str(e)}',
-            'topics_starting': [],
             'topics_ending': [],
             'confidence_levels': [],
             'hard_skills_improvement': [],
@@ -306,42 +281,27 @@ def survey_analytics(request):
 def available_data(request):
     """Get available data for filter dropdowns"""
     try:
-        # Get unique mentors
-        mentors = list(SurveyResponse.objects.exclude(
-            Q(mentor_name='') | Q(mentor_name__isnull=True)
-        ).values_list('mentor_name', flat=True).distinct())
+        # Get all survey responses (both starting and ending)
+        queryset = SurveyResponse.objects.all()
+        
+        # Get unique mentors from project_mentor field
+        mentors = list(queryset.exclude(
+            Q(project_mentor='') | Q(project_mentor__isnull=True)
+        ).values_list('project_mentor', flat=True).distinct())
         
         # Get unique project titles
-        projects = list(SurveyResponse.objects.exclude(
+        projects = list(queryset.exclude(
             Q(project_title='') | Q(project_title__isnull=True)
         ).values_list('project_title', flat=True).distinct())
         
-        # Get unique topics (we'll need to map the numeric values to names)
-        topic_mapping = {
-            1: 'Data Science',
-            2: 'Web Development', 
-            3: 'Mobile Development',
-            4: 'AI/ML',
-            5: 'Cybersecurity',
-            6: 'Cloud Computing',
-            7: 'Other'
-        }
-        
-        # Get unique topic values
-        topics_starting = list(SurveyResponse.objects.filter(
-            topics_working_on__isnull=False
-        ).values_list('topics_working_on', flat=True).distinct())
-        
-        topics_ending = list(SurveyResponse.objects.filter(
-            topics_worked_on__isnull=False
-        ).values_list('topics_worked_on', flat=True).distinct())
-        
-        all_topics = set(topics_starting + topics_ending)
-        topics = [topic_mapping.get(topic, f'Topic {topic}') for topic in all_topics]
+        # Get unique topics from topic field
+        topics = list(queryset.exclude(
+            Q(topic='') | Q(topic__isnull=True)
+        ).values_list('topic', flat=True).distinct())
         
         return Response({
-            'mentors': mentors,
-            'projects': projects,
+            'mentors': sorted(mentors),
+            'projects': sorted(projects),
             'topics': sorted(topics)
         })
     except Exception as e:

@@ -25,9 +25,11 @@ class SurveyResponseListSerializer(serializers.ModelSerializer):
         model = SurveyResponse
         fields = [
             'id', 'response_id', 'survey_type', 'survey_type_display', 
-            'a_number', 'project_title', 'recorded_date', 'finished',
+            'a_number', 'project_title', 'project_mentor', 'topic', 'recorded_date', 'finished',
             'confidence_topics', 'enough_resources', 'hard_skills_improved',
-            'soft_skills_improved', 'confidence_job_placement', 'recommend_asc'
+            'soft_skills_improved', 'confidence_job_placement', 'recommend_asc',
+            'rating_onboarding', 'rating_initiation', 'rating_mentorship', 'rating_team',
+            'rating_communications', 'rating_expectations', 'rating_sponsor', 'rating_workload'
         ]
 
 

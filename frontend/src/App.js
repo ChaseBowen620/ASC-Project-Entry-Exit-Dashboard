@@ -18,7 +18,7 @@ function App() {
   const [filters, setFilters] = useState({});
 
   // Helper function to get mentor name from response
-  const getMentorName = (response) => {
+  const getMentorName = useCallback((response) => {
     // Check Q2.3 (starting survey) or Q3.3 (ending survey)
     const mentorChoice = response.mentor_choice;
     
@@ -50,10 +50,10 @@ function App() {
     }
     
     return '';
-  };
+  }, []);
 
   // Helper function to get topic name from response
-  const getTopicName = (response) => {
+  const getTopicName = useCallback((response) => {
     // Check Q2.6 (starting survey) or Q3.8 (ending survey)
     const topicValue = response.topics_working_on || response.topics_worked_on;
     
@@ -66,7 +66,7 @@ function App() {
     };
     
     return topicMapping[topicValue] || '';
-  };
+  }, []);
 
   // Load all data once on component mount
   const fetchAllData = useCallback(async () => {
@@ -84,41 +84,13 @@ function App() {
       setAllResponses(responses);
       
       // Calculate available data from the responses
-      const responseMentors = [...new Set(responses.map(r => getMentorName(r)).filter(Boolean))];
-      const responseTopics = [...new Set(responses.map(r => getTopicName(r)).filter(Boolean))];
+      const responseMentors = [...new Set(responses.map(r => r.project_mentor).filter(Boolean))];
+      const responseTopics = [...new Set(responses.map(r => r.topic).filter(Boolean))];
       const projects = [...new Set(responses.map(r => r.project_title).filter(Boolean))].sort();
       
-      // Always include all mentor options (actual mentor names + any custom names from data)
-      const mentorNames = {
-        1: 'Andy Brim',
-        2: 'Tyler Brough', 
-        3: 'Polly Conrad',
-        4: 'Chris Corcoran',
-        5: 'Doug Derrick',
-        6: 'Morgan Diederich',
-        7: 'Marc Dotson',
-        8: 'Kelly Fadel',
-        9: 'Carly Fox',
-        10: 'Chelsea Harding',
-        11: 'Pedram Jahangiry',
-        12: 'Sharad Jones',
-        13: 'Toa Pita',
-        14: 'Brinley Zabriskie'
-      };
-      
-      const allMentorOptions = Object.values(mentorNames);
-      // Add any custom mentor names from the data (for "Other" selections)
-      const customMentors = responseMentors.filter(mentor => !Object.values(mentorNames).includes(mentor));
-      allMentorOptions.push(...customMentors);
-      
-      // Always include all topic options
-      const allTopicOptions = [
-        'Data Engineering and Visualization',
-        'Business Intelligence and Analytics',
-        'Machine Learning and AI',
-        'Predictive and Advanced Analytics',
-        'Software Development and Web Design'
-      ];
+      // Use actual mentor and topic data from responses
+      const allMentorOptions = responseMentors;
+      const allTopicOptions = responseTopics;
       
       // Set initial available data (will be updated dynamically based on filters)
       setAvailableData({
@@ -146,8 +118,7 @@ function App() {
     return responses.filter(response => {
       // Mentor filter
       if (filters.mentor) {
-        const mentorName = getMentorName(response);
-        const mentorMatch = mentorName.toLowerCase().includes(filters.mentor.toLowerCase());
+        const mentorMatch = response.project_mentor?.toLowerCase().includes(filters.mentor.toLowerCase());
         if (!mentorMatch) return false;
       }
 
@@ -159,8 +130,7 @@ function App() {
 
       // Topic filter
       if (filters.topic) {
-        const topicName = getTopicName(response);
-        const topicMatch = topicName === filters.topic;
+        const topicMatch = response.topic === filters.topic;
         if (!topicMatch) return false;
       }
 
@@ -268,16 +238,21 @@ function App() {
     // Apply mentor filter if present
     if (currentFilters.mentor) {
       availableResponses = availableResponses.filter(response => {
-        const mentorName = getMentorName(response);
-        return mentorName.toLowerCase().includes(currentFilters.mentor.toLowerCase());
+        return response.project_mentor?.toLowerCase().includes(currentFilters.mentor.toLowerCase());
       });
     }
     
     // Apply topic filter if present
     if (currentFilters.topic) {
       availableResponses = availableResponses.filter(response => {
-        const topicName = getTopicName(response);
-        return topicName === currentFilters.topic;
+        return response.topic === currentFilters.topic;
+      });
+    }
+    
+    // Apply project name filter if present
+    if (currentFilters.projectName) {
+      availableResponses = availableResponses.filter(response => {
+        return response.project_title?.toLowerCase().includes(currentFilters.projectName.toLowerCase());
       });
     }
     
@@ -299,8 +274,8 @@ function App() {
     }
     
     // Now calculate available options from the filtered responses
-    const availableMentors = [...new Set(availableResponses.map(r => getMentorName(r)).filter(Boolean))];
-    const availableTopics = [...new Set(availableResponses.map(r => getTopicName(r)).filter(Boolean))];
+    const availableMentors = [...new Set(availableResponses.map(r => r.project_mentor).filter(Boolean))];
+    const availableTopics = [...new Set(availableResponses.map(r => r.topic).filter(Boolean))];
     const availableProjects = [...new Set(availableResponses.map(r => r.project_title).filter(Boolean))].sort();
     
     return {
@@ -308,17 +283,41 @@ function App() {
       topics: availableTopics,
       projects: availableProjects
     };
-  }, [getMentorName, getTopicName]);
+  }, []);
 
   // Update filtered data when filters or all responses change
   useEffect(() => {
     if (allResponses.length > 0) {
-      const filtered = applyFilters(allResponses, filters);
+      // First, check if current filter values are still valid and clear invalid ones
+      const availableOptions = calculateAvailableOptions(allResponses, filters);
+      const updatedFilters = { ...filters };
+      
+      // Clear mentor filter if current mentor is not in available mentors
+      if (filters.mentor && !availableOptions.mentors.includes(filters.mentor)) {
+        updatedFilters.mentor = '';
+      }
+      
+      // Clear topic filter if current topic is not in available topics
+      if (filters.topic && !availableOptions.topics.includes(filters.topic)) {
+        updatedFilters.topic = '';
+      }
+      
+      // Clear project filter if current project is not in available projects
+      if (filters.projectName && !availableOptions.projects.includes(filters.projectName)) {
+        updatedFilters.projectName = '';
+      }
+      
+      // Update filters if any were cleared
+      if (JSON.stringify(updatedFilters) !== JSON.stringify(filters)) {
+        setFilters(updatedFilters);
+        return; // Exit early, this will trigger the effect again with updated filters
+      }
+      
+      const filtered = applyFilters(allResponses, updatedFilters);
       const calculated = calculateFilteredData(filtered);
       setFilteredData(calculated);
       
       // Update available options based on current filters
-      const availableOptions = calculateAvailableOptions(allResponses, filters);
       setAvailableData(prevData => ({
         ...prevData,
         ...availableOptions
@@ -326,9 +325,9 @@ function App() {
     }
   }, [allResponses, filters, applyFilters, calculateFilteredData, calculateAvailableOptions]);
 
-  const handleFiltersChange = (newFilters) => {
+  const handleFiltersChange = useCallback((newFilters) => {
     setFilters(newFilters);
-  };
+  }, []);
 
   if (loading) {
     return (
@@ -370,10 +369,6 @@ function App() {
             <span className="stat-number">{filteredData.stats?.ending_responses || 0}</span>
             <span className="stat-label">Ending Projects</span>
           </div>
-          <div className="stat-item">
-            <span className="stat-number">{filteredData.stats?.completion_rate || 0}%</span>
-            <span className="stat-label">Completion Rate</span>
-          </div>
         </div>
       </header>
 
@@ -384,7 +379,8 @@ function App() {
         />
         <SummaryNumbers 
           dashboardStats={filteredData.stats} 
-          analytics={filteredData.analytics} 
+          analytics={filteredData.analytics}
+          allResponses={allResponses}
         />
       </main>
     </div>

@@ -46,10 +46,10 @@ const FilterControls = ({ onFiltersChange, availableData }) => {
     return mentor;
   };
 
-  // Get unique values for dropdowns
-  const uniqueMentors = availableData?.mentors || [];
-  const uniqueTopics = availableData?.topics || [];
-  const uniqueProjects = availableData?.projects || [];
+  // Get unique values for dropdowns and sort them alphabetically
+  const uniqueMentors = (availableData?.mentors || []).sort();
+  const uniqueTopics = (availableData?.topics || []).sort();
+  const uniqueProjects = (availableData?.projects || []).sort();
 
   return (
     <div className="filter-controls">

@@ -1,7 +1,7 @@
 import React from 'react';
 import './SummaryNumbers.css';
 
-const SummaryNumbers = ({ dashboardStats, analytics }) => {
+const SummaryNumbers = ({ dashboardStats, analytics, allResponses }) => {
   // Helper function to transform values to -1 to 1 scale
   const transformToScale = (value, originalMin, originalMax) => {
     if (value === null || value === undefined) return 0;
@@ -47,12 +47,40 @@ const SummaryNumbers = ({ dashboardStats, analytics }) => {
     return values.reduce((sum, val) => sum + val, 0) / values.length;
   };
 
+  // Normalize value from original scale to -1 to 1
+  const normalizeValue = (value, minVal = 1, maxVal = 5) => {
+    if (value === null || value === undefined) return null;
+    return 2 * (value - minVal) / (maxVal - minVal) - 1;
+  };
+
+  // Get overall average from all responses (not just filtered ones) and normalize it
+  const getOverallAverage = (fieldName, minVal = 1, maxVal = 5) => {
+    if (!allResponses || allResponses.length === 0) {
+      return null;
+    }
+    
+    // For rating fields, get from ending surveys only
+    const endingSurveys = allResponses.filter(r => r.survey_type === 2);
+    const values = endingSurveys
+      .map(r => r[fieldName])
+      .filter(val => val !== null && val !== undefined);
+    
+    if (values.length === 0) return null;
+    const average = values.reduce((sum, val) => sum + val, 0) / values.length;
+    return normalizeValue(average, minVal, maxVal);
+  };
+
   // Calculate averages for each metric
   const hardSkillsAvg = getAverageValue('hard_skills_improvement');
   const softSkillsAvg = getAverageValue('soft_skills_improvement');
   const confidenceAvg = getAverageValue('confidence_levels');
+
+  // Get overall averages for the first three metrics (1-5 scale)
+  const overallHardSkills = getOverallAverage('hard_skills_improved', 1, 5);
+  const overallSoftSkills = getOverallAverage('soft_skills_improved', 1, 5);
+  const overallConfidence = getOverallAverage('confidence_job_placement', 1, 5);
   
-  // Get rating averages from dashboard stats
+  // Get rating averages from dashboard stats (filtered data)
   const ratingOnboarding = dashboardStats?.average_ratings?.rating_onboarding;
   const ratingInitiation = dashboardStats?.average_ratings?.rating_initiation;
   const ratingMentorship = dashboardStats?.average_ratings?.rating_mentorship;
@@ -62,10 +90,21 @@ const SummaryNumbers = ({ dashboardStats, analytics }) => {
   const ratingSponsor = dashboardStats?.average_ratings?.rating_sponsor;
   const ratingWorkload = dashboardStats?.average_ratings?.rating_workload;
 
+  // Get overall averages for all responses (1-3 scale for ratings)
+  const overallRatingOnboarding = getOverallAverage('rating_onboarding', 1, 3);
+  const overallRatingInitiation = getOverallAverage('rating_initiation', 1, 3);
+  const overallRatingMentorship = getOverallAverage('rating_mentorship', 1, 3);
+  const overallRatingTeam = getOverallAverage('rating_team', 1, 3);
+  const overallRatingCommunications = getOverallAverage('rating_communications', 1, 3);
+  const overallRatingExpectations = getOverallAverage('rating_expectations', 1, 3);
+  const overallRatingSponsor = getOverallAverage('rating_sponsor', 1, 3);
+  const overallRatingWorkload = getOverallAverage('rating_workload', 1, 3);
+
   const summaryItems = [
     {
       title: "Hard Skills Improved",
       value: hardSkillsAvg,
+      overallValue: overallHardSkills,
       originalMin: 1,
       originalMax: 5,
       description: "Q3.9 - My hard skills improved in the areas where I was involved"
@@ -73,6 +112,7 @@ const SummaryNumbers = ({ dashboardStats, analytics }) => {
     {
       title: "Soft Skills Improved", 
       value: softSkillsAvg,
+      overallValue: overallSoftSkills,
       originalMin: 1,
       originalMax: 5,
       description: "Q3.10 - This project helped improve my soft skills"
@@ -80,6 +120,7 @@ const SummaryNumbers = ({ dashboardStats, analytics }) => {
     {
       title: "Confidence in Job Placement",
       value: confidenceAvg,
+      overallValue: overallConfidence,
       originalMin: 1,
       originalMax: 5,
       description: "Q3.11 - This project has increased my confidence in securing a job"
@@ -87,6 +128,7 @@ const SummaryNumbers = ({ dashboardStats, analytics }) => {
     {
       title: "ASC Onboarding",
       value: ratingOnboarding,
+      overallValue: overallRatingOnboarding,
       originalMin: 1,
       originalMax: 3,
       description: "Q3.12_1 - Rating for ASC Onboarding experience"
@@ -94,6 +136,7 @@ const SummaryNumbers = ({ dashboardStats, analytics }) => {
     {
       title: "Project Initiation",
       value: ratingInitiation,
+      overallValue: overallRatingInitiation,
       originalMin: 1,
       originalMax: 3,
       description: "Q3.12_2 - Rating for Project Initiation experience"
@@ -101,6 +144,7 @@ const SummaryNumbers = ({ dashboardStats, analytics }) => {
     {
       title: "Project Mentorship",
       value: ratingMentorship,
+      overallValue: overallRatingMentorship,
       originalMin: 1,
       originalMax: 3,
       description: "Q3.12_3 - Rating for Project Mentorship experience"
@@ -108,6 +152,7 @@ const SummaryNumbers = ({ dashboardStats, analytics }) => {
     {
       title: "Project Team",
       value: ratingTeam,
+      overallValue: overallRatingTeam,
       originalMin: 1,
       originalMax: 3,
       description: "Q3.12_4 - Rating for Project Team experience"
@@ -115,6 +160,7 @@ const SummaryNumbers = ({ dashboardStats, analytics }) => {
     {
       title: "Project Communications",
       value: ratingCommunications,
+      overallValue: overallRatingCommunications,
       originalMin: 1,
       originalMax: 3,
       description: "Q3.12_5 - Rating for Project Communications experience"
@@ -122,6 +168,7 @@ const SummaryNumbers = ({ dashboardStats, analytics }) => {
     {
       title: "Expectations",
       value: ratingExpectations,
+      overallValue: overallRatingExpectations,
       originalMin: 1,
       originalMax: 3,
       description: "Q3.12_6 - Rating for Expectations experience"
@@ -129,6 +176,7 @@ const SummaryNumbers = ({ dashboardStats, analytics }) => {
     {
       title: "Project Sponsor/Contact",
       value: ratingSponsor,
+      overallValue: overallRatingSponsor,
       originalMin: 1,
       originalMax: 3,
       description: "Q3.12_7 - Rating for Project Sponsor/Contact experience"
@@ -136,6 +184,7 @@ const SummaryNumbers = ({ dashboardStats, analytics }) => {
     {
       title: "Workload",
       value: ratingWorkload,
+      overallValue: overallRatingWorkload,
       originalMin: 1,
       originalMax: 3,
       description: "Q3.12_8 - Rating for Workload experience"
@@ -166,8 +215,7 @@ const SummaryNumbers = ({ dashboardStats, analytics }) => {
                 <h3 className="summary-title">{item.title}</h3>
                 <div className="summary-value">{displayValue}</div>
                 <div className="summary-original">
-                  Original: {item.value ? item.value.toFixed(2) : 'N/A'} 
-                  ({item.originalMin}-{item.originalMax})
+                  Average: {item.overallValue !== null && item.overallValue !== undefined ? item.overallValue.toFixed(2) : 'N/A'}
                 </div>
               </div>
             </div>

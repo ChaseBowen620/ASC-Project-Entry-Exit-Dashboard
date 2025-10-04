@@ -8,23 +8,26 @@ uv venv
 echo.
 echo Activating virtual environment and installing dependencies...
 call .venv\Scripts\activate.bat
-uv pip install -r requirements.txt
+uv pip install -r backend\requirements.txt
 
 echo.
 echo Setting up Django database...
+cd backend
 python manage.py makemigrations
 python manage.py makemigrations surveys
 python manage.py migrate
 
 echo.
 echo Installing React dependencies...
-cd frontend
+cd ..\frontend
 npm install
 cd ..
 
 echo.
 echo Importing survey data...
+cd backend
 python manage.py import_survey_data "ASC Project Survey_September 19, 2025_15.07.csv"
+cd ..
 
 echo.
 echo Setup complete! Run start_dashboard.bat to start the application.
