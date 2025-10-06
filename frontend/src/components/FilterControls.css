@@ -142,6 +142,21 @@
   white-space: nowrap;
 }
 
+.results-count {
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  margin: 1rem 0;
+  border-left: 4px solid #28a745;
+  text-align: center;
+}
+
+.count-text {
+  color: #333;
+  font-weight: 500;
+  font-size: 0.95rem;
+}
+
 .active-filters {
   background: #f8f9fa;
   border-radius: 8px;

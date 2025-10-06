@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import './FilterControls.css';
 
-const FilterControls = ({ onFiltersChange, availableData }) => {
+const FilterControls = ({ onFiltersChange, availableData, filteredCount }) => {
   const [filters, setFilters] = useState({
     mentor: '',
     topic: '',
@@ -140,6 +140,13 @@ const FilterControls = ({ onFiltersChange, availableData }) => {
                 />
               </div>
             </div>
+          </div>
+
+          {/* Results Count Display */}
+          <div className="results-count">
+            <span className="count-text">
+              Showing {filteredCount} {filteredCount === 1 ? 'response' : 'responses'} in current selection
+            </span>
           </div>
 
           {/* Active Filters Display */}

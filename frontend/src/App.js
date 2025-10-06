@@ -4,7 +4,7 @@ import SummaryNumbers from './components/SummaryNumbers';
 import FilterControls from './components/FilterControls';
 import './App.css';
 
-const API_BASE_URL = 'http://localhost:8000/api';
+const API_BASE_URL = 'http://18.144.20.248:8000/api';
 
 function App() {
   const [allResponses, setAllResponses] = useState([]);
@@ -16,57 +16,6 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [filters, setFilters] = useState({});
-
-  // Helper function to get mentor name from response
-  const getMentorName = useCallback((response) => {
-    // Check Q2.3 (starting survey) or Q3.3 (ending survey)
-    const mentorChoice = response.mentor_choice;
-    
-    // Mentor mapping based on Mentor Values.txt
-    const mentorNames = {
-      1: 'Andy Brim',
-      2: 'Tyler Brough', 
-      3: 'Polly Conrad',
-      4: 'Chris Corcoran',
-      5: 'Doug Derrick',
-      6: 'Morgan Diederich',
-      7: 'Marc Dotson',
-      8: 'Kelly Fadel',
-      9: 'Carly Fox',
-      10: 'Chelsea Harding',
-      11: 'Pedram Jahangiry',
-      12: 'Sharad Jones',
-      13: 'Toa Pita',
-      14: 'Brinley Zabriskie',
-      15: 'Other'
-    };
-    
-    if (mentorChoice === 15) {
-      // If choice is 15 (Other), use the text input from Q2.3.a or Q3.3.a
-      return response.mentor_name || 'Other';
-    } else if (mentorChoice >= 1 && mentorChoice <= 14) {
-      // Return the actual mentor name for choices 1-14
-      return mentorNames[mentorChoice] || '';
-    }
-    
-    return '';
-  }, []);
-
-  // Helper function to get topic name from response
-  const getTopicName = useCallback((response) => {
-    // Check Q2.6 (starting survey) or Q3.8 (ending survey)
-    const topicValue = response.topics_working_on || response.topics_worked_on;
-    
-    const topicMapping = {
-      1: 'Data Engineering and Visualization',
-      2: 'Business Intelligence and Analytics', 
-      3: 'Machine Learning and AI',
-      4: 'Predictive and Advanced Analytics',
-      5: 'Software Development and Web Design'
-    };
-    
-    return topicMapping[topicValue] || '';
-  }, []);
 
   // Load all data once on component mount
   const fetchAllData = useCallback(async () => {
@@ -356,26 +305,13 @@ function App() {
     <div className="app">
       <header className="app-header">
         <h1>ASC Survey Dashboard</h1>
-        <div className="stats-overview">
-          <div className="stat-item">
-            <span className="stat-number">{filteredData.stats?.total_responses || 0}</span>
-            <span className="stat-label">Total Responses</span>
-          </div>
-          <div className="stat-item">
-            <span className="stat-number">{filteredData.stats?.starting_responses || 0}</span>
-            <span className="stat-label">Starting Projects</span>
-          </div>
-          <div className="stat-item">
-            <span className="stat-number">{filteredData.stats?.ending_responses || 0}</span>
-            <span className="stat-label">Ending Projects</span>
-          </div>
-        </div>
       </header>
 
       <main className="app-main">
         <FilterControls 
           onFiltersChange={handleFiltersChange}
           availableData={availableData}
+          filteredCount={filteredData.stats?.total_responses || 0}
         />
         <SummaryNumbers 
           dashboardStats={filteredData.stats} 
