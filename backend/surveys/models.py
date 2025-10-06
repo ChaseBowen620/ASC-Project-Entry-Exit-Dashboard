@@ -207,12 +207,13 @@ class SurveyResponse(models.Model):
         return 2 * (value - min_val) / (max_val - min_val) - 1
     
     def save(self, *args, **kwargs):
-        # Auto-populate project_mentor and topic fields
-        if not self.project_mentor:
-            self.project_mentor = self.get_mentor_name_from_choice()
+        # Auto-populate project_mentor and topic fields with string values
+        # For starting surveys, use Q2.3 (mentor) and Q2.6 (topic)
+        # For ending surveys, use Q3.3 (mentor) and Q3.8 (topic)
+        if not self.project_mentor and self.mentor_name:
+            self.project_mentor = self.mentor_name
         
-        if not self.topic:
-            self.topic = self.get_topic_name_from_value()
+        # Topic is already set directly from the webhook data
         
         # Auto-populate normalized fields for ending surveys
         if self.survey_type == 2:

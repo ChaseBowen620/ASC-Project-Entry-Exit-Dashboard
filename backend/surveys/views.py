@@ -1,11 +1,10 @@
 import pandas as pd
-import io
+import os
 from django.http import JsonResponse
 from django.db import transaction
 from rest_framework import generics, status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from rest_framework.parsers import MultiPartParser, FormParser
 from .models import SurveyResponse, SurveyChoice
 from .serializers import (
     SurveyResponseSerializer, 
@@ -13,7 +12,6 @@ from .serializers import (
     SurveyChoiceSerializer,
     QualtricsImportSerializer
 )
-from django.db.models import Q
 from datetime import datetime
 
 
@@ -192,7 +190,6 @@ def dashboard_stats(request):
                 if values:
                     avg_ratings[field] = round(sum(values) / len(values), 2)
             except Exception as e:
-                print(f"Error calculating {field}: {e}")
                 avg_ratings[field] = None
         
         # Average recommendation score
@@ -200,7 +197,6 @@ def dashboard_stats(request):
             recommend_scores = list(ending_surveys.exclude(recommend_asc=None).values_list('recommend_asc', flat=True))
             avg_recommendation = round(sum(recommend_scores) / len(recommend_scores), 2) if recommend_scores else None
         except Exception as e:
-            print(f"Error calculating recommendation: {e}")
             avg_recommendation = None
         
         completion_rate = 100  # Since we're only showing ending surveys, completion rate is 100%
@@ -311,3 +307,229 @@ def available_data(request):
             'projects': [],
             'topics': []
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+def qualtrics_webhook(request):
+    """Webhook endpoint to receive new survey responses from Qualtrics"""
+    try:
+        # Get the raw data from the request
+        data = request.data
+        
+        # Log the incoming webhook for debugging
+        print(f"=== WEBHOOK DEBUG ===")
+        print(f"Received webhook data: {data}")
+        print(f"Data type: {type(data)}")
+        print(f"Data keys: {list(data.keys()) if isinstance(data, dict) else 'Not a dict'}")
+        print(f"Request content type: {request.content_type}")
+        print(f"Request method: {request.method}")
+        
+        # Handle different data formats that Qualtrics might send
+        if not isinstance(data, dict):
+            print(f"Data is not a dict, converting...")
+            data = dict(data) if hasattr(data, 'items') else {}
+        
+        # If data is empty, try to get it from request.POST (form data)
+        if not data and request.POST:
+            print(f"Using request.POST data: {dict(request.POST)}")
+            data = dict(request.POST)
+            # Convert single-item lists to strings (Django form behavior)
+            for key, value in data.items():
+                if isinstance(value, list) and len(value) == 1:
+                    data[key] = value[0]
+        
+        print(f"Final processed data: {data}")
+        print(f"=== END WEBHOOK DEBUG ===")
+        
+        # Helper function to safely parse datetime
+        def safe_datetime(value):
+            if not value or value == '':
+                return None
+            try:
+                return pd.to_datetime(value)
+            except:
+                return None
+        
+        # Helper function to safely parse integer
+        def safe_int(value):
+            if not value or value == '' or value == '0':
+                return None
+            try:
+                return int(value)
+            except:
+                return None
+        
+        # Helper function to safely parse float
+        def safe_float(value):
+            if not value or value == '' or value == '0':
+                return None
+            try:
+                return float(value)
+            except:
+                return None
+        
+        # Helper function to safely parse boolean
+        def safe_bool(value):
+            if not value or value == '':
+                return None
+            try:
+                return bool(int(value))
+            except:
+                return None
+        
+        # Helper function to map Q1.1 survey type
+        def map_survey_type(value):
+            # Always return 2 (ending survey) since we only process ending surveys
+            return 2
+        
+        # Helper function to map Q3.9-Q3.11 agreement scale
+        def map_agreement_scale(value):
+            if not value:
+                return None
+            value_lower = str(value).lower().strip()
+            if 'strongly disagree' in value_lower:
+                return 1  # Will be normalized to -1
+            elif 'somewhat disagree' in value_lower:
+                return 2  # Will be normalized to -0.5
+            elif 'neither agree nor disagree' in value_lower or 'neither' in value_lower:
+                return 3  # Will be normalized to 0
+            elif 'somewhat agree' in value_lower:
+                return 4  # Will be normalized to 0.5
+            elif 'strongly agree' in value_lower:
+                return 5  # Will be normalized to 1
+            else:
+                return None
+        
+        # Helper function to map Q3.12 rating scale (1-3)
+        def map_rating_scale(value):
+            if value is None or value == '':
+                return None
+            value_str = str(value).strip()
+            # Handle formats like "1 (Poor)", "2 (Neutral)", "2 (Fair)" or just "1" or "0"
+            if '(' in value_str:
+                # Extract number from "1 (Poor)" or "2 (Neutral)" format
+                number_part = value_str.split('(')[0].strip()
+                try:
+                    return int(number_part)
+                except:
+                    return None
+            else:
+                try:
+                    return int(value_str)
+                except:
+                    return None
+        
+        # Helper function to map mentor names to integers
+        def map_mentor_to_int(mentor_name):
+            if not mentor_name:
+                return None
+            try:
+                # Read mentor values from file
+                mentor_file_path = os.path.join(os.path.dirname(__file__), '..', 'Mentor Values.txt')
+                with open(mentor_file_path, 'r') as f:
+                    mentors = [line.strip() for line in f.readlines() if line.strip()]
+                
+                # Create mapping (1-indexed)
+                mentor_mapping = {mentor: idx + 1 for idx, mentor in enumerate(mentors)}
+                return mentor_mapping.get(mentor_name, len(mentors))  # Default to last (Other) if not found
+            except Exception as e:
+                print(f"Error reading mentor values: {e}")
+                return None
+        
+        # Helper function to map topic names to integers
+        def map_topic_to_int(topic_name):
+            if not topic_name:
+                return None
+            try:
+                # Read topic values from file
+                topic_file_path = os.path.join(os.path.dirname(__file__), '..', 'Topic Values.txt')
+                with open(topic_file_path, 'r') as f:
+                    topics = [line.strip() for line in f.readlines() if line.strip()]
+                
+                # Create mapping (1-indexed)
+                topic_mapping = {topic: idx + 1 for idx, topic in enumerate(topics)}
+                return topic_mapping.get(topic_name, 1)  # Default to first topic if not found
+            except Exception as e:
+                print(f"Error reading topic values: {e}")
+                return None
+        
+        # Get current timestamp for required datetime fields
+        from django.utils import timezone
+        current_time = timezone.now()
+        
+        # Extract survey response data from Qualtrics webhook format
+        # Qualtrics typically sends data in this format
+        response_data = {
+            # Required fields with auto-populated defaults
+            'start_date': safe_datetime(data.get('StartDate')) or current_time,
+            'end_date': safe_datetime(data.get('EndDate')) or current_time,
+            'status': safe_int(data.get('Status')) or 1,
+            'progress': safe_int(data.get('Progress')) or 100,
+            'duration_seconds': safe_int(data.get('Duration (in seconds)')) or 0,
+            'finished': safe_bool(data.get('Finished')) if data.get('Finished') is not None else True,
+            'recorded_date': safe_datetime(data.get('RecordedDate')) or current_time,
+            # Handle both ResponseId and ResponseID field names
+            'response_id': data.get('ResponseId') or data.get('ResponseID', ''),
+            'distribution_channel': data.get('DistributionChannel', 'qualtrics'),
+            'user_language': data.get('UserLanguage', 'EN'),
+            'recaptcha_score': safe_float(data.get('Q_RecaptchaScore')),
+            'survey_type': map_survey_type(data.get('Q1.1')),
+            'a_number': data.get('Q3.1', ''),  # A Number (may be empty in some formats)
+            'project_title': data.get('Q3.2', ''),  # Project title not available in ending surveys
+            'mentor_choice': map_mentor_to_int(data.get('Q3.3', '')),
+            'mentor_other_text': data.get('Q3.3_20_TEXT', ''),
+            'mentor_name': data.get('Q3.3.a', ''),  # Mentor name from ending survey
+            'project_mentor': data.get('Q3.3', ''),  # Keep string for display
+            'is_first_project': None,  # Not used for ending surveys
+            'topics_working_on': None,  # Not used for ending surveys
+            'topics_worked_on': map_topic_to_int(data.get('Q3.8', '')),  # Map topic to integer
+            'topic': data.get('Q3.8', ''),  # Keep string for display
+            'confidence_topics': None,  # Not used for ending surveys
+            'enough_resources': None,  # Not used for ending surveys
+            'hope_to_gain': '',  # Not used for ending surveys
+            'additional_comments_starting': '',  # Not used for ending surveys
+            # Ending survey fields - using string values directly
+            'gained_learned': data.get('Q3.5', ''),  # Q3.5 or Q3.2 for gained/learned
+            'what_went_well': data.get('Q3.6', ''),
+            'what_could_improve': data.get('Q3.7', ''),
+            'hard_skills_improved': map_agreement_scale(data.get('Q3.9')),
+            'soft_skills_improved': map_agreement_scale(data.get('Q3.10')),
+            'confidence_job_placement': map_agreement_scale(data.get('Q3.11')),
+            # Rating fields - using the new mapping function
+            'rating_onboarding': map_rating_scale(data.get('Q3.12.a')),
+            'rating_initiation': map_rating_scale(data.get('Q3.12.b')),
+            'rating_mentorship': map_rating_scale(data.get('Q3.12.c')),
+            'rating_team': map_rating_scale(data.get('Q3.12.d')),
+            'rating_communications': map_rating_scale(data.get('Q3.12.e')),
+            'rating_expectations': map_rating_scale(data.get('Q3.12.f')),
+            'rating_sponsor': map_rating_scale(data.get('Q3.12.g')),
+            'rating_workload': map_rating_scale(data.get('Q3.12.h')),
+            'recommend_asc': safe_int(data.get('Q3.13')),
+            'additional_comments_ending': data.get('Q3.14', ''),
+        }
+        
+        # Create or update the response
+        response_obj, created = SurveyResponse.objects.update_or_create(
+            response_id=response_data['response_id'],
+            defaults=response_data
+        )
+        
+        if created:
+            message = f"New survey response created with ID: {response_obj.id}"
+        else:
+            message = f"Survey response updated with ID: {response_obj.id}"
+        
+        return Response({
+            'success': True,
+            'message': message,
+            'response_id': response_obj.response_id,
+            'survey_type': response_obj.survey_type,
+            'created': created
+        }, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+        
+    except Exception as e:
+        print(f"Webhook error: {str(e)}")
+        return Response({
+            'success': False,
+            'error': f'Failed to process webhook data: {str(e)}'
+        }, status=status.HTTP_400_BAD_REQUEST)

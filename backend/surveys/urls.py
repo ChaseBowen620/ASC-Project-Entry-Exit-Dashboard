@@ -15,6 +15,9 @@ urlpatterns = [
     # Import functionality
     path('import/', views.import_qualtrics_csv, name='import-qualtrics-csv'),
     
+    # Webhook endpoint for Qualtrics
+    path('webhook/qualtrics/', views.qualtrics_webhook, name='qualtrics-webhook'),
+    
     # Dashboard endpoints
     path('dashboard/stats/', views.dashboard_stats, name='dashboard-stats'),
     path('dashboard/analytics/', views.survey_analytics, name='survey-analytics'),
