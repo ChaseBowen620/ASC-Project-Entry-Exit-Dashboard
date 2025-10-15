@@ -379,8 +379,15 @@ def qualtrics_webhook(request):
         
         # Helper function to map Q1.1 survey type
         def map_survey_type(value):
-            # Always return 2 (ending survey) since we only process ending surveys
-            return 2
+            if not value:
+                return None
+            value_lower = str(value).lower().strip()
+            if 'starting' in value_lower:
+                return 1  # Starting survey
+            elif 'ending' in value_lower:
+                return 2  # Ending survey
+            else:
+                return None
         
         # Helper function to map Q3.9-Q3.11 agreement scale
         def map_agreement_scale(value):
@@ -457,6 +464,16 @@ def qualtrics_webhook(request):
         from django.utils import timezone
         current_time = timezone.now()
         
+        # Check if this is an ending survey - only process ending surveys
+        survey_type = map_survey_type(data.get('Q1.1'))
+        if survey_type != 2:  # Not an ending survey
+            return Response({
+                'success': True,
+                'message': f'Survey type {survey_type} ({"Starting" if survey_type == 1 else "Unknown"}) - not processing. Only ending surveys are stored.',
+                'survey_type': survey_type,
+                'skipped': True
+            }, status=status.HTTP_200_OK)
+        
         # Extract survey response data from Qualtrics webhook format
         # Qualtrics typically sends data in this format
         response_data = {
@@ -473,7 +490,7 @@ def qualtrics_webhook(request):
             'distribution_channel': data.get('DistributionChannel', 'qualtrics'),
             'user_language': data.get('UserLanguage', 'EN'),
             'recaptcha_score': safe_float(data.get('Q_RecaptchaScore')),
-            'survey_type': map_survey_type(data.get('Q1.1')),
+            'survey_type': survey_type,  # Already validated as 2 (ending survey)
             'a_number': data.get('Q3.1', ''),  # A Number (may be empty in some formats)
             'project_title': data.get('Q3.2', ''),  # Project title not available in ending surveys
             'mentor_choice': map_mentor_to_int(data.get('Q3.3', '')),
