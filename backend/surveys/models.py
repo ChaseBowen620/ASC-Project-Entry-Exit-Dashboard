@@ -1,5 +1,6 @@
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
+from django.conf import settings
 
 
 class SurveyResponse(models.Model):
@@ -155,44 +156,16 @@ class SurveyResponse(models.Model):
         return self.survey_type == 2
     
     def get_mentor_name_from_choice(self):
-        """Get mentor name from mentor choice"""
-        mentor_names = {
-            1: 'Andy Brim',
-            2: 'Tyler Brough', 
-            3: 'Polly Conrad',
-            4: 'Chris Corcoran',
-            5: 'Doug Derrick',
-            6: 'Morgan Diederich',
-            7: 'Marc Dotson',
-            8: 'Kelly Fadel',
-            9: 'Carly Fox',
-            10: 'Chelsea Harding',
-            11: 'Pedram Jahangiry',
-            12: 'Sharad Jones',
-            13: 'Toa Pita',
-            14: 'Brinley Zabriskie',
-            15: 'Other'
-        }
-        
-        if self.mentor_choice == 15:
-            return self.mentor_name if self.mentor_name else 'Other'
-        elif self.mentor_choice and self.mentor_choice in mentor_names:
-            return mentor_names[self.mentor_choice]
-        return ''
+        """Get mentor name - returns project_mentor field which contains the mentor name string"""
+        # Since we now store mentor names directly in project_mentor from JSON,
+        # we can just return that field instead of reading from a file
+        return self.project_mentor or ''
     
     def get_topic_name_from_value(self):
-        """Get topic name from topic value"""
-        topic_mapping = {
-            1: 'Data Engineering and Visualization',
-            2: 'Business Intelligence and Analytics', 
-            3: 'Machine Learning and AI',
-            4: 'Predictive and Advanced Analytics',
-            5: 'Software Development and Web Design'
-        }
-        
-        # Use appropriate topic field based on survey type
-        topic_value = self.topics_working_on if self.survey_type == 1 else self.topics_worked_on
-        return topic_mapping.get(topic_value, '')
+        """Get topic name - returns topic field which contains the topic name string"""
+        # Since we now store topic names directly in topic field from JSON,
+        # we can just return that field instead of mapping from integers
+        return self.topic or ''
     
     def normalize_value(self, value, min_val=1, max_val=5):
         """Normalize value from min_val-max_val range to -1 to 1"""

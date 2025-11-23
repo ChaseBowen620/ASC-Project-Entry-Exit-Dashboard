@@ -1,7 +1,10 @@
 import pandas as pd
 import os
+import json
 from django.http import JsonResponse
 from django.db import transaction
+from django.db.models import Q
+from django.utils import timezone
 from rest_framework import generics, status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -31,14 +34,14 @@ def apply_filters(queryset, filters):
     if filters.get('startDate'):
         try:
             start_date = datetime.strptime(filters['startDate'], '%Y-%m-%d').date()
-            queryset = queryset.filter(end_date__date__gte=start_date)
+            queryset = queryset.filter(recorded_date__date__gte=start_date)
         except ValueError:
             pass
     
     if filters.get('endDate'):
         try:
             end_date = datetime.strptime(filters['endDate'], '%Y-%m-%d').date()
-            queryset = queryset.filter(end_date__date__lte=end_date)
+            queryset = queryset.filter(recorded_date__date__lte=end_date)
         except ValueError:
             pass
     
@@ -313,6 +316,42 @@ def available_data(request):
 def qualtrics_webhook(request):
     """Webhook endpoint to receive new survey responses from Qualtrics"""
     try:
+        # Capture and log raw request body
+        raw_body_str = None
+        raw_body_json = None
+        try:
+            if hasattr(request, 'body') and request.body:
+                raw_body_str = request.body.decode('utf-8')
+                try:
+                    raw_body_json = json.loads(raw_body_str)
+                except json.JSONDecodeError:
+                    pass
+        except Exception as e:
+            print(f"Error capturing raw body: {e}")
+        
+        # Log raw JSON to file
+        try:
+            log_file_path = '/home/ubuntu/ASC-Project-Entry-Exit-Dashboard/backend/logs/django.log'
+            log_dir = os.path.dirname(log_file_path)
+            os.makedirs(log_dir, exist_ok=True)
+            
+            log_entry = {
+                'timestamp': timezone.now().isoformat(),
+                'request_method': request.method,
+                'content_type': request.content_type or request.META.get('CONTENT_TYPE', 'N/A'),
+                'raw_body': raw_body_json if raw_body_json is not None else raw_body_str,
+            }
+            
+            with open(log_file_path, 'a', encoding='utf-8') as f:
+                f.write(json.dumps(log_entry, indent=2, ensure_ascii=False))
+                f.write('\n')
+                f.write('-' * 80)
+                f.write('\n\n')
+            
+            print(f"Raw webhook data logged to: {log_file_path}")
+        except Exception as e:
+            print(f"Error writing to log file: {e}")
+        
         # Get the raw data from the request
         data = request.data
         
@@ -426,42 +465,8 @@ def qualtrics_webhook(request):
                 except:
                     return None
         
-        # Helper function to map mentor names to integers
-        def map_mentor_to_int(mentor_name):
-            if not mentor_name:
-                return None
-            try:
-                # Read mentor values from file
-                mentor_file_path = os.path.join(os.path.dirname(__file__), '..', 'Mentor Values.txt')
-                with open(mentor_file_path, 'r') as f:
-                    mentors = [line.strip() for line in f.readlines() if line.strip()]
-                
-                # Create mapping (1-indexed)
-                mentor_mapping = {mentor: idx + 1 for idx, mentor in enumerate(mentors)}
-                return mentor_mapping.get(mentor_name, len(mentors))  # Default to last (Other) if not found
-            except Exception as e:
-                print(f"Error reading mentor values: {e}")
-                return None
-        
-        # Helper function to map topic names to integers
-        def map_topic_to_int(topic_name):
-            if not topic_name:
-                return None
-            try:
-                # Read topic values from file
-                topic_file_path = os.path.join(os.path.dirname(__file__), '..', 'Topic Values.txt')
-                with open(topic_file_path, 'r') as f:
-                    topics = [line.strip() for line in f.readlines() if line.strip()]
-                
-                # Create mapping (1-indexed)
-                topic_mapping = {topic: idx + 1 for idx, topic in enumerate(topics)}
-                return topic_mapping.get(topic_name, 1)  # Default to first topic if not found
-            except Exception as e:
-                print(f"Error reading topic values: {e}")
-                return None
         
         # Get current timestamp for required datetime fields
-        from django.utils import timezone
         current_time = timezone.now()
         
         # Check if this is an ending survey - only process ending surveys
@@ -491,16 +496,17 @@ def qualtrics_webhook(request):
             'user_language': data.get('UserLanguage', 'EN'),
             'recaptcha_score': safe_float(data.get('Q_RecaptchaScore')),
             'survey_type': survey_type,  # Already validated as 2 (ending survey)
-            'a_number': data.get('Q3.1', ''),  # A Number (may be empty in some formats)
-            'project_title': data.get('Q3.2', ''),  # Project title not available in ending surveys
-            'mentor_choice': map_mentor_to_int(data.get('Q3.3', '')),
-            'mentor_other_text': data.get('Q3.3_20_TEXT', ''),
-            'mentor_name': data.get('Q3.3.a', ''),  # Mentor name from ending survey
-            'project_mentor': data.get('Q3.3', ''),  # Keep string for display
+            'a_number': data.get('Q3.1', ''),  # A Number (string)
+            'project_title': data.get('Q3.2', ''),  # Project title (string)
+            'mentor_choice': None,  # No longer needed - we use project_mentor string directly
+            'mentor_other_text': data.get('Q3.3.a', ''),  # "Other" mentor text (string)
+            # Extract mentor name: if Q3.3 is "Other", use Q3.3.a, otherwise use Q3.3
+            'mentor_name': data.get('Q3.3.a', '') if data.get('Q3.3', '').strip().lower() == 'other' else data.get('Q3.3', ''),
+            'project_mentor': data.get('Q3.3.a', '') if data.get('Q3.3', '').strip().lower() == 'other' else data.get('Q3.3', ''),  # Display Q3.3.a when "Other" is selected
             'is_first_project': None,  # Not used for ending surveys
             'topics_working_on': None,  # Not used for ending surveys
-            'topics_worked_on': map_topic_to_int(data.get('Q3.8', '')),  # Map topic to integer
-            'topic': data.get('Q3.8', ''),  # Keep string for display
+            'topics_worked_on': None,  # No longer needed - we use topic string directly
+            'topic': data.get('Q3.8', ''),  # Topic name string from JSON
             'confidence_topics': None,  # Not used for ending surveys
             'enough_resources': None,  # Not used for ending surveys
             'hope_to_gain': '',  # Not used for ending surveys

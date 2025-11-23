@@ -239,7 +239,6 @@ ehthumbs.db
 Thumbs.db
 
 # Project specific files
-Mentor Values.txt
 *.csv
 *.xlsx
 *.xls

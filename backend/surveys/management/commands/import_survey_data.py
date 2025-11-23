@@ -1,4 +1,5 @@
 from django.core.management.base import BaseCommand
+from django.conf import settings
 import pandas as pd
 import os
 from surveys.models import SurveyResponse
@@ -10,34 +11,28 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument('csv_file', type=str, help='Path to the CSV file')
     
-    def get_mentor_name(self, mentor_choice, mentor_name_text):
-        """Map mentor choice to mentor name"""
-        mentor_names = {
-            1: 'Andy Brim',
-            2: 'Tyler Brough', 
-            3: 'Polly Conrad',
-            4: 'Chris Corcoran',
-            5: 'Doug Derrick',
-            6: 'Morgan Diederich',
-            7: 'Marc Dotson',
-            8: 'Kelly Fadel',
-            9: 'Carly Fox',
-            10: 'Chelsea Harding',
-            11: 'Pedram Jahangiry',
-            12: 'Sharad Jones',
-            13: 'Toa Pita',
-            14: 'Brinley Zabriskie',
-            15: 'Other'
-        }
+    def get_mentor_name(self, mentor_value, mentor_name_text):
+        """Get mentor name - handles both string (new format) and integer (old format) values"""
+        # If mentor_value is a string (new format), use it directly
+        if isinstance(mentor_value, str):
+            # If it's "Other", use mentor_name_text if available
+            if mentor_value.strip().lower() == 'other':
+                return mentor_name_text if mentor_name_text else 'Other'
+            return mentor_value
         
-        if mentor_choice == 15:
-            return mentor_name_text if mentor_name_text else 'Other'
-        elif mentor_choice and mentor_choice in mentor_names:
-            return mentor_names[mentor_choice]
+        # If mentor_value is an integer (old format), we can't map without the file
+        # Use mentor_name_text if available, otherwise return empty
+        if mentor_name_text:
+            return mentor_name_text
         return ''
     
     def get_topic_name(self, topic_value):
-        """Map topic value to topic name"""
+        """Get topic name - handles both string (new format) and integer (old format) values"""
+        # If topic_value is a string (new format), use it directly
+        if isinstance(topic_value, str):
+            return topic_value
+        
+        # If topic_value is an integer (old format), use hardcoded mapping for backward compatibility
         topic_mapping = {
             1: 'Data Engineering and Visualization',
             2: 'Business Intelligence and Analytics', 
@@ -94,20 +89,25 @@ class Command(BaseCommand):
                     survey_type = int(row['Q1.1'])
                     
                     # Get mentor and topic mappings - depends on survey type
+                    # Handle both string (new format) and integer (old format) values
                     if survey_type == 1:  # Starting survey
-                        mentor_choice = int(row['Q2.3']) if pd.notna(row['Q2.3']) else None
+                        mentor_raw = row['Q2.3'] if pd.notna(row['Q2.3']) else None
+                        mentor_choice = int(mentor_raw) if mentor_raw and str(mentor_raw).isdigit() else mentor_raw
                         mentor_name_text = row['Q2.3.a'] if pd.notna(row['Q2.3.a']) else ''
                     else:  # Ending survey
-                        mentor_choice = int(row['Q3.3']) if pd.notna(row['Q3.3']) else None
+                        mentor_raw = row['Q3.3'] if pd.notna(row['Q3.3']) else None
+                        mentor_choice = int(mentor_raw) if mentor_raw and str(mentor_raw).isdigit() else mentor_raw
                         mentor_name_text = row['Q3.3.a'] if pd.notna(row['Q3.3.a']) else ''
                     
                     project_mentor = self.get_mentor_name(mentor_choice, mentor_name_text)
                     
                     # Get topic based on survey type
                     if survey_type == 1:  # Starting survey
-                        topic_value = int(row['Q2.6']) if pd.notna(row['Q2.6']) else None
+                        topic_raw = row['Q2.6'] if pd.notna(row['Q2.6']) else None
+                        topic_value = int(topic_raw) if topic_raw and str(topic_raw).isdigit() else topic_raw
                     else:  # Ending survey
-                        topic_value = int(row['Q3.8']) if pd.notna(row['Q3.8']) else None
+                        topic_raw = row['Q3.8'] if pd.notna(row['Q3.8']) else None
+                        topic_value = int(topic_raw) if topic_raw and str(topic_raw).isdigit() else topic_raw
                     topic = self.get_topic_name(topic_value)
                     
                     # Map CSV columns to model fields

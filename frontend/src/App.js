@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import SummaryNumbers from './components/SummaryNumbers';
 import FilterControls from './components/FilterControls';
+import SubmissionsList from './components/SubmissionsList';
 import './App.css';
 
 const API_BASE_URL = 'http://18.144.20.248:8000/api';
@@ -85,13 +86,13 @@ function App() {
 
       // Date range filter
       if (filters.startDate) {
-        const responseDate = new Date(response.end_date);
+        const responseDate = new Date(response.recorded_date);
         const startDate = new Date(filters.startDate);
         if (responseDate < startDate) return false;
       }
 
       if (filters.endDate) {
-        const responseDate = new Date(response.end_date);
+        const responseDate = new Date(response.recorded_date);
         const endDate = new Date(filters.endDate);
         if (responseDate > endDate) return false;
       }
@@ -209,7 +210,7 @@ function App() {
     if (currentFilters.startDate) {
       const startDate = new Date(currentFilters.startDate);
       availableResponses = availableResponses.filter(response => {
-        const responseDate = new Date(response.end_date);
+        const responseDate = new Date(response.recorded_date);
         return responseDate >= startDate;
       });
     }
@@ -217,7 +218,7 @@ function App() {
     if (currentFilters.endDate) {
       const endDate = new Date(currentFilters.endDate);
       availableResponses = availableResponses.filter(response => {
-        const responseDate = new Date(response.end_date);
+        const responseDate = new Date(response.recorded_date);
         return responseDate <= endDate;
       });
     }
@@ -278,6 +279,11 @@ function App() {
     setFilters(newFilters);
   }, []);
 
+  const handleSubmissionUpdate = useCallback(() => {
+    // Refresh all data when a submission is updated
+    fetchAllData();
+  }, [fetchAllData]);
+
   if (loading) {
     return (
       <div className="app">
@@ -317,6 +323,10 @@ function App() {
           dashboardStats={filteredData.stats} 
           analytics={filteredData.analytics}
           allResponses={allResponses}
+        />
+        <SubmissionsList 
+          submissions={allResponses}
+          onUpdate={handleSubmissionUpdate}
         />
       </main>
     </div>
