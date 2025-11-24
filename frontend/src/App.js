@@ -3,11 +3,16 @@ import axios from 'axios';
 import SummaryNumbers from './components/SummaryNumbers';
 import FilterControls from './components/FilterControls';
 import SubmissionsList from './components/SubmissionsList';
+import Login from './components/Login';
 import './App.css';
 
 const API_BASE_URL = 'http://18.144.20.248:8000/api';
 
 function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    // Check if user is already authenticated (from localStorage)
+    return localStorage.getItem('isAuthenticated') === 'true';
+  });
   const [allResponses, setAllResponses] = useState([]);
   const [filteredData, setFilteredData] = useState({
     stats: null,
@@ -17,6 +22,16 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [filters, setFilters] = useState({});
+
+  const handleLogin = () => {
+    setIsAuthenticated(true);
+  };
+
+  const handleSignOut = () => {
+    localStorage.removeItem('isAuthenticated');
+    localStorage.removeItem('username');
+    setIsAuthenticated(false);
+  };
 
   // Load all data once on component mount
   const fetchAllData = useCallback(async () => {
@@ -58,10 +73,12 @@ function App() {
     }
   }, []);
 
-  // Load data once on mount
+  // Load data once on mount (only if authenticated)
   useEffect(() => {
-    fetchAllData();
-  }, [fetchAllData]);
+    if (isAuthenticated) {
+      fetchAllData();
+    }
+  }, [isAuthenticated, fetchAllData]);
 
   // Client-side filtering function
   const applyFilters = useCallback((responses, filters) => {
@@ -284,6 +301,11 @@ function App() {
     fetchAllData();
   }, [fetchAllData]);
 
+  // Show login screen if not authenticated
+  if (!isAuthenticated) {
+    return <Login onLogin={handleLogin} />;
+  }
+
   if (loading) {
     return (
       <div className="app">
@@ -310,7 +332,12 @@ function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <h1>ASC Survey Dashboard</h1>
+        <div className="header-content">
+          <h1>ASC Survey Dashboard</h1>
+          <button className="sign-out-button" onClick={handleSignOut}>
+            Sign Out
+          </button>
+        </div>
       </header>
 
       <main className="app-main">

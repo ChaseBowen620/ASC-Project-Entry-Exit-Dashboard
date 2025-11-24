@@ -17,7 +17,7 @@ class Command(BaseCommand):
         if isinstance(mentor_value, str):
             # If it's "Other", use mentor_name_text if available
             if mentor_value.strip().lower() == 'other':
-                return mentor_name_text if mentor_name_text else 'Other'
+            return mentor_name_text if mentor_name_text else 'Other'
             return mentor_value
         
         # If mentor_value is an integer (old format), we can't map without the file
