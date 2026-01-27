@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import axios from 'axios';
 import './SubmissionsList.css';
 
-const API_BASE_URL = 'http://18.144.20.248:8000/api';
+// Configure API base via env; falls back to relative '/api' for proxy/rewrites
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '/api';
 
 function SubmissionsList({ submissions, onUpdate }) {
   const [editingId, setEditingId] = useState(null);

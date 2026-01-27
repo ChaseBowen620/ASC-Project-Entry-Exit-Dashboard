@@ -6,7 +6,8 @@ import SubmissionsList from './components/SubmissionsList';
 import Login from './components/Login';
 import './App.css';
 
-const API_BASE_URL = 'http://18.144.20.248:8000/api';
+// Configure API base via env; falls back to relative '/api' for proxy/rewrites
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '/api';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
@@ -65,7 +66,7 @@ function App() {
       });
     } catch (err) {
       const errorMessage = err.response?.data?.error || err.message || 'Unknown error';
-      setError(`Failed to fetch dashboard data: ${errorMessage}. Make sure the Django backend is running on http://localhost:8000`);
+      setError(`Failed to fetch dashboard data: ${errorMessage}. Make sure the Django backend is running at https://ascprojectsurvey.com/api`);
       console.error('Error fetching data:', err);
       console.error('Error response:', err.response?.data);
     } finally {
@@ -311,7 +312,7 @@ function App() {
       <div className="app">
         <div className="loading">
           <h2>Loading Dashboard...</h2>
-          <p>Make sure the Django backend is running on http://localhost:8000</p>
+          <p>Make sure the Django backend is running at https://ascprojectsurvey.com/api</p>
         </div>
       </div>
     );

@@ -1,0 +1,22 @@
+[Unit]
+Description=ASC Dashboard Django Backend
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/ASC-Project-Entry-Exit-Dashboard/backend
+Environment="PATH=/home/ubuntu/ASC-Project-Entry-Exit-Dashboard/.venv/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart=/home/ubuntu/ASC-Project-Entry-Exit-Dashboard/.venv/bin/python manage.py runserver 0.0.0.0:8000
+Restart=always
+RestartSec=10
+StandardOutput=append:/home/ubuntu/ASC-Project-Entry-Exit-Dashboard/logs/backend.log
+StandardError=append:/home/ubuntu/ASC-Project-Entry-Exit-Dashboard/logs/backend.error.log
+
+[Install]
+WantedBy=multi-user.target
+
+
+
+

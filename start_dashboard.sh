@@ -20,14 +20,15 @@ sleep 5
 
 echo "Starting React Frontend..."
 cd ../frontend
+export DANGEROUSLY_DISABLE_HOST_CHECK=true
 nohup npm start > ../nohup_frontend.out 2>&1 &
 FRONTEND_PID=$!
 echo "Frontend started (PID: $FRONTEND_PID)"
 
 echo ""
 echo "Dashboard is starting up!"
-echo "Django Backend: http://18.144.20.248:8000"
-echo "React Frontend: http://18.144.20.248:3000"
+echo "Dashboard: https://ascprojectsurvey.com"
+echo "API: https://ascprojectsurvey.com/api/"
 echo ""
 echo "Backend logs: tail -f /home/ubuntu/ASC-Project-Entry-Exit-Dashboard/nohup_backend.out"
 echo "Frontend logs: tail -f /home/ubuntu/ASC-Project-Entry-Exit-Dashboard/nohup_frontend.out"

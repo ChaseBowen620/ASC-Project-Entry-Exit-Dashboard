@@ -128,6 +128,7 @@ temp/
 # Logs
 logs
 *.log
+nohup_*.out
 
 # Runtime data
 pids

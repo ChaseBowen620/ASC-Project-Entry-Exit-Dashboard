@@ -19,11 +19,7 @@ A complete dashboard application for visualizing ASC (Applied Science Center) su
 
 ## Quick Start
 
-### Option 1: Automated Setup (Windows with uv)
-1. Run `setup_dashboard.bat` to create virtual environment and install dependencies
-2. Run `start_dashboard.bat` to start both backend and frontend
-
-### Option 2: Manual Setup with uv
+### Manual Setup with uv
 
 #### Prerequisites
 - Python 3.8+ installed
@@ -35,42 +31,43 @@ A complete dashboard application for visualizing ASC (Applied Science Center) su
 # Create virtual environment
 uv venv
 
-# Activate virtual environment (Windows)
-.venv\Scripts\activate
+# Activate virtual environment (macOS/Linux)
+source .venv/bin/activate
 
 # Install Python dependencies
-uv pip install -r requirements.txt
+uv pip install -r backend/requirements.txt
 
 # Set up database
+cd backend
 python manage.py makemigrations
 python manage.py migrate
 
-# Import survey data
+# Import survey data (optional)
 python manage.py import_survey_data "ASC Project Survey_September 19, 2025_15.07.csv"
-
-# Start Django server
-python manage.py runserver
+cd ..
 ```
 
 #### Frontend Setup
 ```bash
-# Navigate to frontend directory
 cd frontend
-
-# Install dependencies
 npm install
-
-# Start React development server
 npm start
 ```
 
-### Option 3: Manual Setup (Traditional pip)
-See `setup_manual.md` for detailed instructions.
+#### Start backend (separate terminal)
+```bash
+./start_backend.sh
+# or: source .venv/bin/activate && cd backend && python manage.py runserver 0.0.0.0:8000
+```
+
+### Production (EC2 with nginx)
+
+- Use `./start_dashboard.sh` to run backend and frontend, or systemd via `manage_services.sh` (see `SERVICE_MANAGEMENT.md`).
+- Run `./setup_https_certbot.sh` for HTTPS. See `ACCESS_INSTRUCTIONS.md`.
 
 ## Access Points
-- **React Dashboard**: http://localhost:3000
-- **Django API**: http://localhost:8000/api/
-- **Django Admin**: http://localhost:8000/admin/
+- **Production**: https://ascprojectsurvey.com and https://ascprojectsurvey.com/api/
+- **Local**: React http://localhost:3000 · Django API http://localhost:8000/api/ · Admin http://localhost:8000/admin/
 
 ## API Endpoints
 
