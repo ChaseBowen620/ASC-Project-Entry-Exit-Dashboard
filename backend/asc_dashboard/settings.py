@@ -25,6 +25,12 @@ ALLOWED_HOSTS = [
     'ascprojectsurvey.com',
     'www.ascprojectsurvey.com',
 ]
+# Comma-separated extra hosts (e.g. EC2 public IP when Qualtrics uses raw IP in URL)
+_extra_hosts = (config('EXTRA_ALLOWED_HOSTS', default='') or '').strip()
+if _extra_hosts:
+    ALLOWED_HOSTS.extend(
+        h.strip() for h in _extra_hosts.split(',') if h.strip()
+    )
 
 # Application definition
 INSTALLED_APPS = [
