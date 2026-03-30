@@ -1,16 +1,6 @@
 import React, { useState } from 'react';
+import api from '../api/apiClient';
 import './Login.css';
-
-// Get credentials from environment variables
-const CORRECT_USERNAME = process.env.REACT_APP_LOGIN_USERNAME || '';
-const CORRECT_PASSWORD = process.env.REACT_APP_LOGIN_PASSWORD || '';
-
-// Debug: Log environment variables (remove in production)
-console.log('Environment variables check:', {
-  REACT_APP_LOGIN_USERNAME: process.env.REACT_APP_LOGIN_USERNAME ? 'SET' : 'NOT SET',
-  REACT_APP_LOGIN_PASSWORD: process.env.REACT_APP_LOGIN_PASSWORD ? 'SET' : 'NOT SET',
-  allEnvKeys: Object.keys(process.env).filter(key => key.startsWith('REACT_APP_'))
-});
 
 function Login({ onLogin }) {
   const [username, setUsername] = useState('');
@@ -18,30 +8,27 @@ function Login({ onLogin }) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setLoading(true);
 
-    // Validate that credentials are configured
-    if (!CORRECT_USERNAME || !CORRECT_PASSWORD) {
-      setError('Login credentials not configured. Please check environment variables.');
+    try {
+      await api.post('/token/', { username, password });
+      sessionStorage.setItem('dashboardUsername', username);
+      onLogin();
+    } catch (err) {
+      const detail = err.response?.data?.detail;
+      const msg =
+        typeof detail === 'string'
+          ? detail
+          : Array.isArray(detail)
+            ? detail.map((d) => d.detail || d).join(' ')
+            : 'Invalid username or password';
+      setError(msg || 'Invalid username or password');
+    } finally {
       setLoading(false);
-      return;
     }
-
-    // Simulate a small delay for better UX
-    setTimeout(() => {
-      if (username === CORRECT_USERNAME && password === CORRECT_PASSWORD) {
-        // Store authentication in localStorage
-        localStorage.setItem('isAuthenticated', 'true');
-        localStorage.setItem('username', username);
-        onLogin();
-      } else {
-        setError('Invalid username or password');
-        setLoading(false);
-      }
-    }, 300);
   };
 
   return (
@@ -84,4 +71,3 @@ function Login({ onLogin }) {
 }
 
 export default Login;
-

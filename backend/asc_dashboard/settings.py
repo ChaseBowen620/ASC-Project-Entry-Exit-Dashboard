@@ -3,19 +3,28 @@ Django settings for asc_dashboard project.
 """
 
 from pathlib import Path
+from datetime import timedelta
 from decouple import config
+from django.core.exceptions import ImproperlyConfigured
 import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = config('SECRET_KEY', default='django-insecure-change-this-in-production')
+SECRET_KEY = (config('SECRET_KEY', default='') or '').strip()
+if not SECRET_KEY:
+    raise ImproperlyConfigured('SECRET_KEY must be set in the environment or .env file.')
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = config('DEBUG', default=True, cast=bool)
+# Default False so a missing .env is safe; set DEBUG=True in .env for local development.
+DEBUG = config('DEBUG', default=False, cast=bool)
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0', 'ascprojectsurvey.com', 'www.ascprojectsurvey.com']
+ALLOWED_HOSTS = [
+    'localhost',
+    '127.0.0.1',
+    '0.0.0.0',
+    'ascprojectsurvey.com',
+    'www.ascprojectsurvey.com',
+]
 
 # Application definition
 INSTALLED_APPS = [
@@ -26,6 +35,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
+    'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
     'surveys',
 ]
@@ -104,8 +114,11 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # REST Framework settings
 REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'surveys.authentication.CookieJWTAuthentication',
+    ],
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.AllowAny',
+        'rest_framework.permissions.IsAuthenticated',
     ],
     'DEFAULT_RENDERER_CLASSES': [
         'rest_framework.renderers.JSONRenderer',
@@ -114,15 +127,45 @@ REST_FRAMEWORK = {
     'PAGE_SIZE': 100
 }
 
-# CORS settings
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=14),
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True,
+}
+
+# httpOnly JWT cookies (browser); Authorization header still works for non-cookie clients.
+JWT_AUTH_COOKIE = 'asc_access'
+JWT_AUTH_REFRESH_COOKIE = 'asc_refresh'
+# In production use HTTPS and set JWT_COOKIE_SECURE=True (default when DEBUG=False).
+JWT_COOKIE_SECURE = config('JWT_COOKIE_SECURE', default=not DEBUG, cast=bool)
+JWT_COOKIE_SAMESITE = config('JWT_COOKIE_SAMESITE', default='Lax')
+JWT_COOKIE_PATH = '/'
+JWT_COOKIE_DOMAIN = (config('JWT_COOKIE_DOMAIN', default='') or '').strip() or None
+
+# CORS: HTTPS only for production host; local dev uses localhost.
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
     "https://ascprojectsurvey.com",
-    "http://ascprojectsurvey.com",
+    "https://www.ascprojectsurvey.com",
 ]
 
 CORS_ALLOW_CREDENTIALS = True
+
+CSRF_TRUSTED_ORIGINS = [
+    "https://ascprojectsurvey.com",
+    "https://www.ascprojectsurvey.com",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+
+if not DEBUG:
+    # Enable when Django serves HTTPS directly; behind a TLS-terminating proxy, use
+    # SECURE_PROXY_SSL_HEADER and often leave SECURE_SSL_REDIRECT=False.
+    SECURE_SSL_REDIRECT = config('SECURE_SSL_REDIRECT', default=False, cast=bool)
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
 
 # Celery Configuration (for background tasks)
 CELERY_BROKER_URL = config('REDIS_URL', default='redis://localhost:6379/0')

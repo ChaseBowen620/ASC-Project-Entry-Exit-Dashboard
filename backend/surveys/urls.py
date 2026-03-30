@@ -1,7 +1,13 @@
 from django.urls import path
+
 from . import views
 
 urlpatterns = [
+    path('token/', views.DashboardTokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('token/refresh/', views.CookieTokenRefreshView.as_view(), name='token_refresh'),
+    path('auth/ping/', views.auth_ping, name='auth-ping'),
+    path('auth/logout/', views.logout_view, name='auth-logout'),
+
     # Test endpoint
     path('test/', views.test_api, name='test-api'),
     

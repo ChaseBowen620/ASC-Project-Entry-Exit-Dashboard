@@ -1,37 +1,50 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import axios from 'axios';
+import api, { clearAuth } from './api/apiClient';
 import SummaryNumbers from './components/SummaryNumbers';
 import FilterControls from './components/FilterControls';
 import SubmissionsList from './components/SubmissionsList';
 import Login from './components/Login';
 import './App.css';
 
-// Configure API base via env; falls back to relative '/api' for proxy/rewrites
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '/api';
-
 function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    // Check if user is already authenticated (from localStorage)
-    return localStorage.getItem('isAuthenticated') === 'true';
-  });
+  const [authChecked, setAuthChecked] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [allResponses, setAllResponses] = useState([]);
   const [filteredData, setFilteredData] = useState({
     stats: null,
     analytics: null
   });
   const [availableData, setAvailableData] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [filters, setFilters] = useState({});
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .get('/auth/ping/')
+      .then(() => {
+        if (!cancelled) setIsAuthenticated(true);
+      })
+      .catch(() => {
+        if (!cancelled) setIsAuthenticated(false);
+      })
+      .finally(() => {
+        if (!cancelled) setAuthChecked(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleLogin = () => {
     setIsAuthenticated(true);
   };
 
-  const handleSignOut = () => {
-    localStorage.removeItem('isAuthenticated');
-    localStorage.removeItem('username');
+  const handleSignOut = async () => {
+    await clearAuth();
     setIsAuthenticated(false);
+    setLoading(false);
   };
 
   // Load all data on mount and when explicitly refreshed.
@@ -46,11 +59,9 @@ function App() {
       }
       setError(null);
       
-      // First test if API is working
-      const testResponse = await axios.get(`${API_BASE_URL}/test/`);
-      console.log('API test successful:', testResponse.data);
-      
-      const responsesResponse = await axios.get(`${API_BASE_URL}/responses/`);
+      await api.get('/test/');
+
+      const responsesResponse = await api.get('/responses/');
       
       const responses = responsesResponse.data.results || responsesResponse.data;
       setAllResponses(responses);
@@ -74,7 +85,6 @@ function App() {
       const errorMessage = err.response?.data?.error || err.message || 'Unknown error';
       setError(`Failed to fetch dashboard data: ${errorMessage}. Make sure the Django backend is running at https://ascprojectsurvey.com/api`);
       console.error('Error fetching data:', err);
-      console.error('Error response:', err.response?.data);
     } finally {
       if (showLoadingOverlay) {
         setLoading(false);
@@ -309,6 +319,16 @@ function App() {
     // Refresh without full-page loader so the page does not jump to the top
     fetchAllData(true);
   }, [fetchAllData]);
+
+  if (!authChecked) {
+    return (
+      <div className="app">
+        <div className="loading">
+          <h2>Checking session…</h2>
+        </div>
+      </div>
+    );
+  }
 
   // Show login screen if not authenticated
   if (!isAuthenticated) {

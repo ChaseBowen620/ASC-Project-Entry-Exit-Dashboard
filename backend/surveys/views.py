@@ -1,21 +1,115 @@
+import logging
 import pandas as pd
-import os
-import json
-from django.http import JsonResponse
+import hmac
+from decouple import config
+from django.conf import settings as django_settings
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 from rest_framework import generics, status
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from rest_framework_simplejwt.tokens import RefreshToken
+from .jwt_cookies import set_jwt_cookies, clear_jwt_cookies
 from .models import SurveyResponse, SurveyChoice
 from .serializers import (
-    SurveyResponseSerializer, 
-    SurveyResponseListSerializer, 
+    SurveyResponseSerializer,
+    SurveyResponseListSerializer,
     SurveyChoiceSerializer,
-    QualtricsImportSerializer
+    QualtricsImportSerializer,
+    DashboardTokenObtainPairSerializer,
 )
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
+
+
+def _http_header_value(request, header_name):
+    """Resolve a request header the way Django exposes it in META."""
+    meta_key = 'HTTP_' + header_name.upper().replace('-', '_')
+    return request.META.get(meta_key) or ''
+
+
+def _qualtrics_webhook_auth(request):
+    """
+    Require Qualtrics workflow to send a custom header matching QUALTRICS_WEBHOOK_SECRET.
+    Header name defaults to Qualtrics-Webhook-Secret; override with QUALTRICS_WEBHOOK_HEADER.
+    Returns (ok, response_body, status_code).
+    """
+    expected = (config('QUALTRICS_WEBHOOK_SECRET', default='') or '').strip()
+    if not expected:
+        return False, {'success': False, 'detail': 'Webhook endpoint is not configured.'}, status.HTTP_503_SERVICE_UNAVAILABLE
+    header_name = (config('QUALTRICS_WEBHOOK_HEADER', default='Qualtrics-Webhook-Secret') or '').strip()
+    if not header_name:
+        return False, {'success': False, 'detail': 'Webhook endpoint is not configured.'}, status.HTTP_503_SERVICE_UNAVAILABLE
+    received = _http_header_value(request, header_name).strip()
+    exp_b = expected.encode('utf-8')
+    recv_b = received.encode('utf-8')
+    if len(recv_b) != len(exp_b) or not hmac.compare_digest(recv_b, exp_b):
+        return False, {'success': False, 'detail': 'Forbidden.'}, status.HTTP_403_FORBIDDEN
+    return True, None, None
+
+
+class DashboardTokenObtainPairView(TokenObtainPairView):
+    serializer_class = DashboardTokenObtainPairSerializer
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        response = super().post(request, *args, **kwargs)
+        if response.status_code != 200:
+            return response
+        access = response.data.get('access')
+        refresh = response.data.get('refresh')
+        set_jwt_cookies(response, access, refresh)
+        response.data = {'detail': 'Login successful'}
+        return response
+
+
+class CookieTokenRefreshView(TokenRefreshView):
+    """Refresh access token using refresh body or httpOnly refresh cookie; sets new cookies."""
+
+    def post(self, request, *args, **kwargs):
+        refresh = None
+        if hasattr(request, 'data') and request.data:
+            refresh = request.data.get('refresh')
+        if not refresh:
+            refresh = request.COOKIES.get(django_settings.JWT_AUTH_REFRESH_COOKIE)
+        if not refresh:
+            return Response(
+                {'detail': 'Refresh token missing.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+        serializer = self.get_serializer(data={'refresh': refresh})
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        access = data['access']
+        new_refresh = data.get('refresh')
+        response = Response({'detail': 'ok'}, status=status.HTTP_200_OK)
+        set_jwt_cookies(response, access, new_refresh if new_refresh is not None else None)
+        return response
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def auth_ping(request):
+    return Response({'detail': 'ok'})
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def logout_view(request):
+    refresh = request.COOKIES.get(django_settings.JWT_AUTH_REFRESH_COOKIE)
+    response = Response({'detail': 'Logged out'})
+    clear_jwt_cookies(response)
+    if refresh:
+        try:
+            token = RefreshToken(refresh)
+            token.blacklist()
+        except Exception:
+            logger.debug('Refresh blacklist skipped on logout', exc_info=True)
+    return response
 
 
 def apply_filters(queryset, filters):
@@ -147,8 +241,9 @@ def import_qualtrics_csv(request):
                             if created:
                                 imported_count += 1
                                 
-                        except Exception as e:
-                            errors.append(f"Row {index + 3}: {str(e)}")
+                        except Exception:
+                            logger.warning('CSV import skipped row %s', index + 3, exc_info=True)
+                            errors.append(f'Row {index + 3}: could not be imported')
                             continue
                 
                 return Response({
@@ -158,10 +253,12 @@ def import_qualtrics_csv(request):
                     'total_errors': len(errors)
                 }, status=status.HTTP_201_CREATED)
                 
-            except Exception as e:
-                return Response({
-                    'error': f'Failed to process CSV file: {str(e)}'
-                }, status=status.HTTP_400_BAD_REQUEST)
+            except Exception:
+                logger.exception('CSV import failed')
+                return Response(
+                    {'error': 'Failed to process CSV file.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
         
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -212,9 +309,10 @@ def dashboard_stats(request):
             'average_recommendation': avg_recommendation,
             'completion_rate': completion_rate
         })
-    except Exception as e:
+    except Exception:
+        logger.exception('dashboard_stats failed')
         return Response({
-            'error': f'Error calculating dashboard stats: {str(e)}',
+            'error': 'Error calculating dashboard statistics.',
             'total_responses': 0,
             'starting_responses': 0,
             'ending_responses': 0,
@@ -266,9 +364,10 @@ def survey_analytics(request):
             'hard_skills_improvement': hard_skills_data,
             'soft_skills_improvement': soft_skills_data,
         })
-    except Exception as e:
+    except Exception:
+        logger.exception('survey_analytics failed')
         return Response({
-            'error': f'Error calculating analytics: {str(e)}',
+            'error': 'Error calculating analytics.',
             'topics_ending': [],
             'confidence_levels': [],
             'hard_skills_improvement': [],
@@ -303,9 +402,10 @@ def available_data(request):
             'projects': sorted(projects),
             'topics': sorted(topics)
         })
-    except Exception as e:
+    except Exception:
+        logger.exception('available_data failed')
         return Response({
-            'error': f'Error getting available data: {str(e)}',
+            'error': 'Error loading filter metadata.',
             'mentors': [],
             'projects': [],
             'topics': []
@@ -313,73 +413,26 @@ def available_data(request):
 
 
 @api_view(['POST'])
+@permission_classes([AllowAny])
 def qualtrics_webhook(request):
     """Webhook endpoint to receive new survey responses from Qualtrics"""
+    ok, err_body, err_status = _qualtrics_webhook_auth(request)
+    if not ok:
+        return Response(err_body, status=err_status)
     try:
-        # Capture and log raw request body
-        raw_body_str = None
-        raw_body_json = None
-        try:
-            if hasattr(request, 'body') and request.body:
-                raw_body_str = request.body.decode('utf-8')
-                try:
-                    raw_body_json = json.loads(raw_body_str)
-                except json.JSONDecodeError:
-                    pass
-        except Exception as e:
-            print(f"Error capturing raw body: {e}")
-        
-        # Log raw JSON to file
-        try:
-            log_file_path = '/home/ubuntu/ASC-Project-Entry-Exit-Dashboard/backend/logs/django.log'
-            log_dir = os.path.dirname(log_file_path)
-            os.makedirs(log_dir, exist_ok=True)
-            
-            log_entry = {
-                'timestamp': timezone.now().isoformat(),
-                'request_method': request.method,
-                'content_type': request.content_type or request.META.get('CONTENT_TYPE', 'N/A'),
-                'raw_body': raw_body_json if raw_body_json is not None else raw_body_str,
-            }
-            
-            with open(log_file_path, 'a', encoding='utf-8') as f:
-                f.write(json.dumps(log_entry, indent=2, ensure_ascii=False))
-                f.write('\n')
-                f.write('-' * 80)
-                f.write('\n\n')
-            
-            print(f"Raw webhook data logged to: {log_file_path}")
-        except Exception as e:
-            print(f"Error writing to log file: {e}")
-        
-        # Get the raw data from the request
         data = request.data
-        
-        # Log the incoming webhook for debugging
-        print(f"=== WEBHOOK DEBUG ===")
-        print(f"Received webhook data: {data}")
-        print(f"Data type: {type(data)}")
-        print(f"Data keys: {list(data.keys()) if isinstance(data, dict) else 'Not a dict'}")
-        print(f"Request content type: {request.content_type}")
-        print(f"Request method: {request.method}")
-        
+
         # Handle different data formats that Qualtrics might send
         if not isinstance(data, dict):
-            print(f"Data is not a dict, converting...")
             data = dict(data) if hasattr(data, 'items') else {}
-        
+
         # If data is empty, try to get it from request.POST (form data)
         if not data and request.POST:
-            print(f"Using request.POST data: {dict(request.POST)}")
             data = dict(request.POST)
-            # Convert single-item lists to strings (Django form behavior)
             for key, value in data.items():
                 if isinstance(value, list) and len(value) == 1:
                     data[key] = value[0]
-        
-        print(f"Final processed data: {data}")
-        print(f"=== END WEBHOOK DEBUG ===")
-        
+
         # Helper function to safely parse datetime
         def safe_datetime(value):
             if not value or value == '':
@@ -542,6 +595,11 @@ def qualtrics_webhook(request):
         else:
             message = f"Survey response updated with ID: {response_obj.id}"
         
+        logger.info(
+            'Qualtrics webhook: stored response_id=%s created=%s',
+            response_obj.response_id,
+            created,
+        )
         return Response({
             'success': True,
             'message': message,
@@ -549,10 +607,10 @@ def qualtrics_webhook(request):
             'survey_type': response_obj.survey_type,
             'created': created
         }, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
-        
-    except Exception as e:
-        print(f"Webhook error: {str(e)}")
-        return Response({
-            'success': False,
-            'error': f'Failed to process webhook data: {str(e)}'
-        }, status=status.HTTP_400_BAD_REQUEST)
+
+    except Exception:
+        logger.exception('Qualtrics webhook failed')
+        return Response(
+            {'success': False, 'error': 'Webhook processing failed.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
