@@ -34,10 +34,16 @@ function App() {
     setIsAuthenticated(false);
   };
 
-  // Load all data once on component mount
-  const fetchAllData = useCallback(async () => {
+  // Load all data on mount and when explicitly refreshed.
+  // When `silent` is true, skip the full-page loading state so scroll position is preserved
+  // (e.g. after editing a submission in the list).
+  const fetchAllData = useCallback(async (silent = false) => {
+    let showLoadingOverlay = false;
     try {
-      setLoading(true);
+      if (!silent) {
+        setLoading(true);
+        showLoadingOverlay = true;
+      }
       setError(null);
       
       // First test if API is working
@@ -70,7 +76,9 @@ function App() {
       console.error('Error fetching data:', err);
       console.error('Error response:', err.response?.data);
     } finally {
-      setLoading(false);
+      if (showLoadingOverlay) {
+        setLoading(false);
+      }
     }
   }, []);
 
@@ -298,8 +306,8 @@ function App() {
   }, []);
 
   const handleSubmissionUpdate = useCallback(() => {
-    // Refresh all data when a submission is updated
-    fetchAllData();
+    // Refresh without full-page loader so the page does not jump to the top
+    fetchAllData(true);
   }, [fetchAllData]);
 
   // Show login screen if not authenticated
